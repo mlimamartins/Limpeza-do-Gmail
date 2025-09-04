@@ -1,0 +1,57 @@
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+
+SCOPES = ['https://mail.google.com/']
+
+def main():
+    
+    flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+    creds = flow.run_local_server(port=0)
+    service = build('gmail', 'v1', credentials=creds)
+
+    
+    labels_to_clear = ['CATEGORY_SOCIAL', 'CATEGORY_UPDATES']
+
+    for label_id in labels_to_clear:
+        print(f"\nLimpando label: {label_id}")
+        total_messages = 0
+        messages_to_delete = []
+
+        
+        next_page_token = None
+        while True:
+            results = service.users().messages().list(
+                userId='me', labelIds=[label_id], maxResults=100, pageToken=next_page_token
+            ).execute()
+
+            messages = results.get('messages', [])
+            messages_to_delete.extend(messages)
+            total_messages += len(messages)
+
+            next_page_token = results.get('nextPageToken')
+            if not next_page_token:
+                break
+
+        if total_messages == 0:
+            print(f"Nenhuma mensagem encontrada no label {label_id}")
+            continue
+
+        print(f"{total_messages} mensagens encontradas no label {label_id}:")
+        
+        for msg in messages_to_delete:
+            message = service.users().messages().get(userId='me', id=msg['id']).execute()
+            headers = message['payload']['headers']
+            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), "(sem assunto)")
+            print(" -", subject)
+
+        
+        confirm = input(f"Deseja excluir todas as {total_messages} mensagens do label {label_id}? (s/n) ")
+        if confirm.lower() == 's':
+            for msg in messages_to_delete:
+                service.users().messages().delete(userId='me', id=msg['id']).execute()
+            print(f"Todas as mensagens do label {label_id} foram excluídas!")
+        else:
+            print(f"Nenhuma mensagem do label {label_id} foi excluída.")
+
+if __name__ == '__main__':
+    main()
